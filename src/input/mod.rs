@@ -416,7 +416,8 @@ impl State {
         }
 
         let horizontal = direction.horizontal;
-        let vertical = direction.vertical;
+        // If no axis is explicitly set, default to vertical for backward compatibility.
+        let vertical = direction.vertical || (!direction.horizontal && !direction.vertical);
 
         let axis = if cumulative_x.abs() > cumulative_y.abs() {
             OverviewToggleAxis::Horizontal
@@ -428,6 +429,25 @@ impl State {
             OverviewToggleAxis::Horizontal if horizontal => Some(axis),
             OverviewToggleAxis::Vertical if vertical => Some(axis),
             _ => None,
+        }
+    }
+
+    fn overview_toggle_gesture_allowed_for_state(
+        &self,
+        axis: OverviewToggleAxis,
+        cumulative_x: f64,
+        cumulative_y: f64,
+        is_overview_open: bool,
+    ) -> bool {
+        let overview_delta = match axis {
+            OverviewToggleAxis::Horizontal => -cumulative_x,
+            OverviewToggleAxis::Vertical => -cumulative_y,
+        };
+
+        if is_overview_open {
+            overview_delta < 0.
+        } else {
+            overview_delta > 0.
         }
     }
 
@@ -3939,8 +3959,8 @@ impl State {
         }
 
         if let Some((cx, cy)) = &mut self.niri.gesture_swipe_4f_cumulative {
-            *cx += delta_x;
-            *cy += delta_y;
+            *cx += uninverted_delta_x;
+            *cy += uninverted_delta_y;
 
             // Check if the gesture moved far enough to decide. Threshold copied from GNOME Shell.
             let (cx, cy) = (*cx, *cy);
@@ -3948,10 +3968,13 @@ impl State {
                 self.niri.gesture_swipe_4f_cumulative = None;
 
                 if let Some(axis) = self.overview_toggle_axis_from_delta(cx, cy) {
-                    self.niri.layout.overview_gesture_begin();
-                    self.niri.gesture_swipe_4f_horizontal =
-                        Some(matches!(axis, OverviewToggleAxis::Horizontal));
-                    self.niri.queue_redraw_all();
+                    if self.overview_toggle_gesture_allowed_for_state(axis, cx, cy, is_overview_open)
+                    {
+                        self.niri.layout.overview_gesture_begin();
+                        self.niri.gesture_swipe_4f_horizontal =
+                            Some(matches!(axis, OverviewToggleAxis::Horizontal));
+                        self.niri.queue_redraw_all();
+                    }
                 }
             }
         }

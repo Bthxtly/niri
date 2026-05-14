@@ -633,6 +633,6 @@ binds {
 
 gestures {
   overview-toggle-direction {
-    horizontal
+    vertical
   }
 }
