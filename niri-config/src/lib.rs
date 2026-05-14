@@ -1663,6 +1663,11 @@ mod tests {
                     bottom_left: false,
                     bottom_right: false,
                 },
+                overview_toggle_direction: OverviewToggleDirection {
+                    off: false,
+                    horizontal: false,
+                    vertical: false,
+                },
             },
             overview: Overview {
                 zoom: 0.5,

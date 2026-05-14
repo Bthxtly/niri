@@ -28,7 +28,14 @@ gestures {
         // bottom-left
         // bottom-right
     }
+
+    overview-toggle-direction {
+        // off
+        horizontal
+        vertical
+    }
 }
+```
 ```
 
 ### `dnd-edge-view-scroll`
@@ -113,3 +120,16 @@ gestures {
 ```
 
 You can also customize hot corners per-output [in the output config](./Configuration:-Outputs.md#hot-corners).
+
+### `overview-toggle-direction`
+
+Whether toggle overview in horizontal or vertical direction with four-finger gesture or not. This
+help avoid conflicts with other touchpad-enhancing software like [`fusuma`](https://github.com/iberianpig/fusuma/).
+
+```kdl
+// enable vertical and disable horizontal direction to toggle overview
+gestures {
+    overview-toggle-direction {
+        vertical
+    }
+}

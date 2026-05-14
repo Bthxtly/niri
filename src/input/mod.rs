@@ -6,7 +6,8 @@ use std::time::Duration;
 use calloop::timer::{TimeoutAction, Timer};
 use input::event::gesture::GestureEventCoordinates as _;
 use niri_config::{
-    Action, Bind, Binds, Config, Key, ModKey, Modifiers, MruDirection, SwitchBinds, Trigger,
+    gestures::OverviewToggleDirection, Action, Bind, Binds, Config, Key, ModKey, Modifiers,
+    MruDirection, SwitchBinds, Trigger,
 };
 use niri_ipc::LayoutSwitchTarget;
 use smithay::backend::input::{
@@ -73,6 +74,12 @@ pub const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(400);
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabletData {
     pub aspect_ratio: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum OverviewToggleAxis {
+    Horizontal,
+    Vertical,
 }
 
 pub enum PointerOrTouchStartData<D: SeatHandler> {
@@ -387,6 +394,41 @@ impl State {
                     .get(surface)
             })
             .is_some_and(KeyboardShortcutsInhibitor::is_active)
+    }
+
+    fn configured_overview_toggle_direction(&self) -> OverviewToggleDirection {
+        self.niri.config.borrow().gestures.overview_toggle_direction
+    }
+
+    fn overview_toggle_direction_enabled(&self) -> bool {
+        let direction = self.configured_overview_toggle_direction();
+        !direction.off
+    }
+
+    fn overview_toggle_axis_from_delta(
+        &self,
+        cumulative_x: f64,
+        cumulative_y: f64,
+    ) -> Option<OverviewToggleAxis> {
+        let direction = self.configured_overview_toggle_direction();
+        if direction.off {
+            return None;
+        }
+
+        let horizontal = direction.horizontal;
+        let vertical = direction.vertical;
+
+        let axis = if cumulative_x.abs() > cumulative_y.abs() {
+            OverviewToggleAxis::Horizontal
+        } else {
+            OverviewToggleAxis::Vertical
+        };
+
+        match axis {
+            OverviewToggleAxis::Horizontal if horizontal => Some(axis),
+            OverviewToggleAxis::Vertical if vertical => Some(axis),
+            _ => None,
+        }
     }
 
     fn on_keyboard<I: InputBackend>(
@@ -3802,11 +3844,15 @@ impl State {
             // We handled this event.
             return;
         } else if event.fingers() == 4 {
-            self.niri.layout.overview_gesture_begin();
-            self.niri.queue_redraw_all();
+            self.niri.gesture_swipe_4f_cumulative = None;
+            self.niri.gesture_swipe_4f_horizontal = None;
 
-            // We handled this event.
-            return;
+            if self.overview_toggle_direction_enabled() {
+                self.niri.gesture_swipe_4f_cumulative = Some((0., 0.));
+
+                // We handled this event.
+                return;
+            }
         }
 
         let serial = SERIAL_COUNTER.next_serial();
@@ -3842,6 +3888,7 @@ impl State {
             delta_y = libinput_event.dy_unaccelerated();
         }
 
+        let uninverted_delta_x = delta_x;
         let uninverted_delta_y = delta_y;
 
         let device = event.device();
@@ -3891,6 +3938,24 @@ impl State {
             }
         }
 
+        if let Some((cx, cy)) = &mut self.niri.gesture_swipe_4f_cumulative {
+            *cx += delta_x;
+            *cy += delta_y;
+
+            // Check if the gesture moved far enough to decide. Threshold copied from GNOME Shell.
+            let (cx, cy) = (*cx, *cy);
+            if cx * cx + cy * cy >= 16. * 16. {
+                self.niri.gesture_swipe_4f_cumulative = None;
+
+                if let Some(axis) = self.overview_toggle_axis_from_delta(cx, cy) {
+                    self.niri.layout.overview_gesture_begin();
+                    self.niri.gesture_swipe_4f_horizontal =
+                        Some(matches!(axis, OverviewToggleAxis::Horizontal));
+                    self.niri.queue_redraw_all();
+                }
+            }
+        }
+
         let timestamp = Duration::from_micros(event.time());
 
         let mut handled = false;
@@ -3916,10 +3981,15 @@ impl State {
             handled = true;
         }
 
+        let overview_delta = if self.niri.gesture_swipe_4f_horizontal == Some(true) {
+            -uninverted_delta_x
+        } else {
+            -uninverted_delta_y
+        };
         let res = self
             .niri
             .layout
-            .overview_gesture_update(-uninverted_delta_y, timestamp);
+            .overview_gesture_update(overview_delta, timestamp);
         if let Some(redraw) = res {
             if redraw {
                 self.niri.queue_redraw_all();
@@ -3949,6 +4019,8 @@ impl State {
 
     fn on_gesture_swipe_end<I: InputBackend>(&mut self, event: I::GestureSwipeEndEvent) {
         self.niri.gesture_swipe_3f_cumulative = None;
+        self.niri.gesture_swipe_4f_cumulative = None;
+        self.niri.gesture_swipe_4f_horizontal = None;
 
         let mut handled = false;
         let res = self.niri.layout.workspace_switch_gesture_end(Some(true));

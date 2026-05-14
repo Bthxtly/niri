@@ -6,6 +6,7 @@ pub struct Gestures {
     pub dnd_edge_view_scroll: DndEdgeViewScroll,
     pub dnd_edge_workspace_switch: DndEdgeWorkspaceSwitch,
     pub hot_corners: HotCorners,
+    pub overview_toggle_direction: OverviewToggleDirection,
 }
 
 #[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
@@ -16,6 +17,8 @@ pub struct GesturesPart {
     pub dnd_edge_workspace_switch: Option<DndEdgeWorkspaceSwitchPart>,
     #[knuffel(child)]
     pub hot_corners: Option<HotCorners>,
+    #[knuffel(child)]
+    pub overview_toggle_direction: Option<OverviewToggleDirection>,
 }
 
 impl MergeWith<GesturesPart> for Gestures {
@@ -25,7 +28,7 @@ impl MergeWith<GesturesPart> for Gestures {
             dnd_edge_view_scroll,
             dnd_edge_workspace_switch,
         );
-        merge_clone!((self, part), hot_corners);
+        merge_clone!((self, part), hot_corners, overview_toggle_direction);
     }
 }
 
@@ -109,4 +112,14 @@ pub struct HotCorners {
     pub bottom_left: bool,
     #[knuffel(child)]
     pub bottom_right: bool,
+}
+
+#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
+pub struct OverviewToggleDirection {
+    #[knuffel(child)]
+    pub off: bool,
+    #[knuffel(child)]
+    pub horizontal: bool,
+    #[knuffel(child)]
+    pub vertical: bool,
 }
